@@ -45,6 +45,17 @@
       height: 100%;
       border: none;
     }
+    .info {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      font-size: 20px;
+      color: #333;
+      background-color: rgba(255,255,255,0.7);
+      padding: 5px 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
@@ -67,7 +78,9 @@
       <iframe id="chartFrame" src="cau1.html" title="Biểu đồ"></iframe>
     </div>
   </div>
-
+  <div class="info">
+    [221124029152] [Nguyễn Ngọc Tường Vy] [48K29.1]
+  </div>
   <script>
     function showChart(chartNumber) {
       document.getElementById("chartFrame").src = "cau" + chartNumber + ".html";
