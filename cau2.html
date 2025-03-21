@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Q2</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    svg {
+      font-family: sans-serif;
+    }
+    .bar:hover {
+      fill: orange;
+    }
+    .axis-label {
+      font-size: 12px;
+    }
+    .value-label {
+      font-size: 12px;
+      fill: black;
+      font-weight: bold;
+    }
+    .tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 5px;
+      font-size: 12px;
+      font-family: sans-serif;
+      pointer-events: none;
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <svg></svg>
+  <div class="tooltip"></div>
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5YkI613Xtm0-uSA6NozEkDAWm17X7G-iCh_tVPrEv48RNmwgqkRpdwFcJntWRcTQOoMv1y2T1bBwC/pub?gid=1701574632&single=true&output=csv';
+    d3.csv(csvUrl).then(data => {
+      data.forEach(d => {
+        d['Thành tiền'] = +d['Thành tiền'];
+      });
+      const salesData = Array.from(
+        d3.group(data, d => `${d['Mã nhóm hàng']} - ${d['Tên nhóm hàng']}`),
+        ([group, values]) => ({
+          group: group,
+          sales: d3.sum(values, v => v['Thành tiền'])
+        })
+      );
+      salesData.sort((a, b) => a.sales - b.sales);
+      const margin = { top: 50, right: 100, bottom: 100, left: 200 };
+      const width = 900 - margin.left - margin.right;
+      const height = salesData.length * 40;
+      const svg = d3.select('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+      const x = d3.scaleLinear()
+        .domain([0, d3.max(salesData, d => d.sales)])
+        .range([0, width]);
+      const y = d3.scaleBand()
+        .domain(salesData.map(d => d.group))
+        .range([height, 0])
+        .padding(0.2);
+      const colorScale = d3.scaleOrdinal(d3.schemeTableau10)
+        .domain(salesData.map(d => d.group));
+      const tooltip = d3.select('.tooltip');
+      svg.selectAll('.bar')
+        .data(salesData)
+        .enter().append('rect')
+        .attr('class', 'bar')
+        .attr('x', 0)
+        .attr('y', d => y(d.group))
+        .attr('height', y.bandwidth())
+        .attr('width', d => x(d.sales))
+        .attr('fill', d => colorScale(d.group))
+        .on('mouseover', function(event, d) {
+          tooltip.transition().duration(200).style('opacity', 0.9);
+          tooltip.html(`<strong>${d.group}</strong><br/>Doanh số: ${d3.format(",")(d.sales)} VNĐ`)
+            .style('left', (event.pageX + 10) + 'px')
+            .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mousemove', function(event) {
+          tooltip.style('left', (event.pageX + 10) + 'px')
+                 .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mouseout', function() {
+          tooltip.transition().duration(500).style('opacity', 0);
+        });
+      svg.selectAll('.value-label')
+        .data(salesData)
+        .enter().append('text')
+        .attr('class', 'value-label')
+        .attr('x', d => x(d.sales) + 5)
+        .attr('y', d => y(d.group) + y.bandwidth() / 2)
+        .attr('dy', '0.35em')
+        .style('font-weight', 'normal')
+        .text(d => `${Math.round(d.sales / 1e6).toLocaleString()} triệu VNĐ`);
+      svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(
+          d3.axisBottom(x)
+            .tickValues(d3.range(0, d3.max(salesData, d => d.sales) + 100000000, 100000000))
+            .tickFormat(d => `${(d / 1e6).toFixed(0)}M`)
+        )
+        .append('text')
+        .attr('class', 'axis-label')
+        .attr('x', width / 2)
+        .attr('y', 40)
+        .attr('text-anchor', 'middle')
+        .text('Doanh số bán (VNĐ)');
+      svg.append('g')
+        .call(d3.axisLeft(y))
+        .selectAll('text')
+        .attr('class', 'axis-label')
+        .style('font-size', '12px')
+        .attr('dy', '0.35em');
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', -20)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '20px')
+        .text('Doanh số bán hàng theo Nhóm hàng');
+    });
+  </script>
+</body>
+</html>

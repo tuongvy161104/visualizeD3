@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Q4</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    svg {
+      font-family: sans-serif;
+    }
+    .bar:hover {
+      fill: orange;
+    }
+    .axis-label {
+      font-size: 12px;
+    }
+    .bar-label {
+      font-size: 10px;
+      fill: black;
+      text-anchor: middle;
+    }
+    .tooltip {
+      position: absolute;
+      z-index: 1000;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 5px;
+      font-size: 12px;
+      font-family: sans-serif;
+      pointer-events: none;
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <svg></svg>
+  <div class="tooltip"></div>
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5YkI613Xtm0-uSA6NozEkDAWm17X7G-iCh_tVPrEv48RNmwgqkRpdwFcJntWRcTQOoMv1y2T1bBwC/pub?gid=1701574632&single=true&output=csv';
+    d3.csv(csvUrl).then(data => {
+      data.forEach(d => {
+        d['Thời gian tạo đơn'] = new Date(d['Thời gian tạo đơn']);
+        d.SL = +d.SL;
+        d['Đơn giá'] = +d['Đơn giá'];
+        d['Doanh thu'] = d.SL * d['Đơn giá'];
+        d['Ngày'] = d['Thời gian tạo đơn'].toISOString().split("T")[0];
+        d['Ngày trong tuần'] = (d['Thời gian tạo đơn'].getDay() + 6) % 7;
+      });
+      
+      const grouped = d3.rollup(
+        data,
+        v => ({
+          Tổng_Doanh_Số: d3.sum(v, d => d['Doanh thu']),
+          Tổng_SL: d3.sum(v, d => d.SL),
+          So_Ngày: new Set(v.map(d => d['Ngày'])).size
+        }),
+        d => d['Ngày trong tuần']
+      );
+      
+      const dayLabels = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
+      const result = Array.from(grouped, ([dayIndex, stats]) => ({
+        dayIndex: +dayIndex,
+        dayLabel: dayLabels[dayIndex],
+        avgSales: stats.Tổng_Doanh_Số / stats.So_Ngày
+      })).sort((a, b) => a.dayIndex - b.dayIndex);
+      
+      const margin = { top: 50, right: 50, bottom: 80, left: 80 };
+      const width = 800 - margin.left - margin.right;
+      const height = 500 - margin.top - margin.bottom;
+      
+      const svg = d3.select("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+      
+      const x = d3.scaleBand()
+        .domain(result.map(d => d.dayLabel))
+        .range([0, width])
+        .padding(0.2);
+      
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(result, d => d.avgSales)])
+        .nice()
+        .range([height, 0]);
+      
+      const color = d3.scaleOrdinal(d3.schemeTableau10)
+        .domain(result.map(d => d.dayLabel));
+      
+      const tooltip = d3.select(".tooltip");
+      svg.selectAll(".bar")
+        .data(result)
+        .enter().append("rect")
+        .attr("class", "bar")
+        .attr("x", d => x(d.dayLabel))
+        .attr("y", d => y(d.avgSales))
+        .attr("width", x.bandwidth())
+        .attr("height", d => height - y(d.avgSales))
+        .attr("fill", d => color(d.dayLabel))
+        .on("mouseover", function(event, d) {
+          tooltip.transition().duration(200).style("opacity", 0.9);
+          tooltip.html(`<strong>${d.dayLabel}</strong><br/>Doanh số TB: ${d3.format(",.0f")(d.avgSales)} VNĐ`)
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mousemove", function(event, d) {
+          tooltip.style("left", (event.pageX + 10) + "px")
+                 .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", function() {
+          tooltip.transition().duration(500).style("opacity", 0);
+        });
+      
+      svg.selectAll(".bar-label")
+        .data(result)
+        .enter().append("text")
+        .attr("class", "bar-label")
+        .attr("x", d => x(d.dayLabel) + x.bandwidth() / 2)
+        .attr("y", d => y(d.avgSales) - 5)
+        .text(d => `${d3.format(",.0f")(d.avgSales)} VNĐ`);
+      
+        svg.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x))
+        .selectAll("text")
+        .attr("class", "axis-label");
+      
+      const maxSales = d3.max(result, d => d.avgSales);
+      const yTicks = d3.range(0, maxSales + 1e6, 1e6);
+      svg.append("g")
+        .call(d3.axisLeft(y)
+                .tickValues(yTicks)
+                .tickFormat(d => `${(d / 1e6).toFixed(0)}M`))
+        .selectAll("text")
+        .attr("class", "axis-label");
+      
+      svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", -20)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "20px")
+        .text("Doanh số bán trung bình theo Ngày trong tuần");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Q9 - Horizontal Bar Charts</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    h1.main-title {
+      text-align: center;
+      margin: 10px 0;
+      font-size: 20px;
+    }
+    #chart {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, auto);
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 10px;
+    }
+    .tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 5px;
+      border-radius: 5px;
+      pointer-events: none;
+      font-family: sans-serif;
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 1000;
+    }
+    .bar:hover {
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <h1 class="main-title">Xác suất bán của các mặt hàng trên mỗi đơn hàng theo từng nhóm</h1>
+
+  <div id="chart"></div>
+
+  <script>
+    const csvUrl =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vS5YkI613Xtm0-uSA6NozEkDAWm17X7G-iCh_tVPrEv48RNmwgqkRpdwFcJntWRcTQOoMv1y2T1bBwC/pub?gid=1701574632&single=true&output=csv";
+
+    d3.csv(csvUrl).then((data) => {
+      const groupSales = d3.rollup(
+        data,
+        (v) => v.length,
+        (d) => d["Mã nhóm hàng"],
+        (d) => d["Mã mặt hàng"]
+      );
+
+      const totalOrders = d3.rollup(
+        data,
+        (v) => v.length,
+        (d) => d["Mã nhóm hàng"]
+      );
+
+      const quantityOrder = [];
+      groupSales.forEach((groupMap, groupKey) => {
+        groupMap.forEach((orderCount, itemKey) => {
+          const totalOrderCount = totalOrders.get(groupKey) || 0;
+          const saleProbability = orderCount / totalOrderCount;
+          quantityOrder.push({
+            "Mã nhóm hàng": groupKey,
+            "Mã mặt hàng": itemKey,
+            "Xác suất bán": saleProbability,
+          });
+        });
+      });
+
+      let groups = Array.from(new Set(quantityOrder.map((d) => d["Mã nhóm hàng"])));
+      const margin = { top: 30, right: 30, bottom: 40, left: 100 };
+      const width = 400 - margin.left - margin.right;
+      const height = 300 - margin.top - margin.bottom;
+
+      const svgContainer = d3
+        .select("#chart")
+        .selectAll("svg")
+        .data(groups)
+        .enter()
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const x = d3.scaleLinear().range([0, width]);
+      const y = d3.scaleBand().range([0, height]).padding(0.1);
+
+      const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+      const tooltip = d3
+        .select("body")
+        .append("div")
+        .attr("class", "tooltip");
+
+      svgContainer.each(function (group) {
+        let groupData = quantityOrder.filter((d) => d["Mã nhóm hàng"] === group);
+
+        groupData.sort((a, b) => d3.descending(a["Xác suất bán"], b["Xác suất bán"]));
+
+        x.domain([0, d3.max(groupData, (d) => d["Xác suất bán"]) || 0]);
+        y.domain(groupData.map((d) => d["Mã mặt hàng"]));
+
+        const svg = d3.select(this);
+
+        svg
+          .selectAll(".bar")
+          .data(groupData)
+          .enter()
+          .append("rect")
+          .attr("class", "bar")
+          .attr("y", (d) => y(d["Mã mặt hàng"]))
+          .attr("x", 0)
+          .attr("height", y.bandwidth())
+          .attr("width", (d) => x(d["Xác suất bán"]))
+          .attr("fill", (d) => colorScale(d["Mã mặt hàng"]))
+          .on("mouseover", function (event, d) {
+            d3.select(this).style("cursor", "pointer");
+            tooltip
+              .style("opacity", 1)
+              .html(
+                `Mặt hàng: <strong>${d["Mã mặt hàng"]}</strong><br/>
+                 Xác suất bán: <strong>${(d["Xác suất bán"] * 100).toFixed(2)}%</strong>`
+              )
+              .style("left", event.pageX + 10 + "px")
+              .style("top", event.pageY - 28 + "px");
+          })
+          .on("mousemove", function (event) {
+            tooltip
+              .style("left", event.pageX + 10 + "px")
+              .style("top", event.pageY - 28 + "px");
+          })
+          .on("mouseout", function () {
+            tooltip.style("opacity", 0);
+          });
+
+        svg
+          .append("g")
+          .attr("transform", `translate(0,${height})`)
+          .call(d3.axisBottom(x).ticks(5));
+
+        svg.append("g").call(d3.axisLeft(y));
+
+        svg
+          .append("text")
+          .attr("x", width / 2)
+          .attr("y", -10)
+          .attr("text-anchor", "middle")
+          .style("font-size", "14px")
+          .style("font-weight", "bold")
+          .text(group);
+      });
+    });
+  </script>
+</body>
+</html>

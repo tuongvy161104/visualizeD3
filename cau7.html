@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xác suất bán theo nhóm hàng</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        svg {
+            font-family: sans-serif;
+        }
+        .bar:hover {
+            fill: orange;
+        }
+        .axis-label {
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <svg></svg>
+    <script>
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5YkI613Xtm0-uSA6NozEkDAWm17X7G-iCh_tVPrEv48RNmwgqkRpdwFcJntWRcTQOoMv1y2T1bBwC/pub?gid=1701574632&single=true&output=csv';
+
+        d3.csv(csvUrl).then(data => {
+            const ordersByGroup = d3.rollup(
+                data,
+                v => new Set(v.map(d => d['Mã đơn hàng'])).size,
+                d => d['Mã nhóm hàng'] + ' - ' + d['Tên nhóm hàng']
+            );
+
+            const totalOrders = new Set(data.map(d => d['Mã đơn hàng'])).size;
+
+            const salesProb = Array.from(ordersByGroup, ([group, count]) => ({
+                group: group,
+                prob: count / totalOrders
+            })).sort((a, b) => b.prob - a.prob);
+
+            const margin = { top: 50, right: 50, bottom: 80, left: 200 };
+            const width = 800 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = d3.select('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(salesProb, d => d.prob)])
+                .range([0, width]);
+
+            const y = d3.scaleBand()
+                .domain(salesProb.map(d => d.group))
+                .range([0, height])
+                .padding(0.1);
+
+            const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+            svg.selectAll('.bar')
+                .data(salesProb)
+                .enter().append('rect')
+                .attr('class', 'bar')
+                .attr('x', 0)
+                .attr('y', d => y(d.group))
+                .attr('width', d => x(d.prob))
+                .attr('height', y.bandwidth())
+                .attr('fill', (d, i) => color(i));
+
+            svg.selectAll('.label')
+                .data(salesProb)
+                .enter().append('text')
+                .attr('class', 'label')
+                .attr('x', d => x(d.prob) + 5)
+                .attr('y', d => y(d.group) + y.bandwidth() / 2)
+                .attr('dy', '.35em')
+                .attr('fill', 'black')
+                .attr('font-size', '10px')
+                .text(d => (d.prob * 100).toFixed(1) + '%');
+
+            svg.append('g')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(x).ticks(10, ".0%"));
+
+            svg.append('g').call(d3.axisLeft(y));
+
+            svg.append('text')
+                .attr('x', width / 2)
+                .attr('y', -10)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '20px')
+                .text('Xác suất bán theo nhóm hàng');
+
+            svg.append('text')
+                .attr('class', 'axis-label')
+                .attr('x', width / 2)
+                .attr('y', height + margin.bottom - 30)
+                .attr('text-anchor', 'middle')
+                .text('Xác suất bán');
+
+            svg.append('text')
+                .attr('class', 'axis-label')
+                .attr('x', -margin.left)
+                .attr('y', -20)
+                .attr('text-anchor', 'start')
+
+        });
+    </script>
+</body>
+</html>

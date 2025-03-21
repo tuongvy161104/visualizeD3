@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Q8</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    svg { font-family: sans-serif; }
+    .line { fill: none; stroke-width: 2px; }
+    .axis-label { font-size: 12px; }
+    .tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 5px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      font-family: sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <svg></svg>
+  <div class="tooltip"></div>
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5YkI613Xtm0-uSA6NozEkDAWm17X7G-iCh_tVPrEv48RNmwgqkRpdwFcJntWRcTQOoMv1y2T1bBwC/pub?gid=1701574632&single=true&output=csv';
+    d3.csv(csvUrl).then(data => {
+      data.forEach(d => {
+        d['Thời gian tạo đơn'] = new Date(d['Thời gian tạo đơn']);
+        d.Tháng = d['Thời gian tạo đơn'].getMonth() + 1;
+        d['Mã đơn hàng'] = d['Mã đơn hàng'];
+        d['Mã nhóm hàng'] = d['Mã nhóm hàng'];
+        d['Tên nhóm hàng'] = d['Tên nhóm hàng'];
+      });
+      const totalOrdersByMonth = d3.rollup(data, v => new Set(v.map(d => d['Mã đơn hàng'])).size, d => d.Tháng);
+      const groupOrdersByMonth = d3.rollup(data, v => new Set(v.map(d => d['Mã đơn hàng'])).size, d => d.Tháng, d => d['Mã nhóm hàng'] + ' - ' + d['Tên nhóm hàng']);
+      let processedData = [];
+      groupOrdersByMonth.forEach((groupMap, month) => {
+        groupMap.forEach((count, group) => {
+          processedData.push({
+            Tháng: month,
+            'Mã nhóm hàng': group,
+            'Xác suất mua hàng': count / totalOrdersByMonth.get(month)
+          });
+        });
+      });
+      const nestedData = d3.groups(processedData, d => d['Mã nhóm hàng'])
+        .map(([key, values]) => ({
+          key: key,
+          values: values.sort((a, b) => a.Tháng - b.Tháng)
+        }));
+      const margin = { top: 50, right: 150, bottom: 80, left: 50 };
+      const width = 800 - margin.left - margin.right;
+      const height = 400 - margin.top - margin.bottom;
+      const svg = d3.select('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+      const x = d3.scaleLinear().domain([1, 12]).range([0, width]);
+      const y = d3.scaleLinear().domain([0, d3.max(processedData, d => d['Xác suất mua hàng'])]).range([height, 0]);
+      const color = d3.scaleOrdinal(d3.schemeTableau10).domain(nestedData.map(d => d.key));
+      svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x).ticks(12).tickFormat(d => `Tháng ${d}`));
+      svg.append('g').call(d3.axisLeft(y));
+      const line = d3.line().x(d => x(d.Tháng)).y(d => y(d['Xác suất mua hàng']));
+      svg.selectAll('.line')
+        .data(nestedData)
+        .enter().append('path')
+        .attr('class', 'line')
+        .attr('d', d => line(d.values))
+        .attr('stroke', d => color(d.key));
+      const tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+      nestedData.forEach(series => {
+        svg.selectAll(null)
+          .data(series.values)
+          .enter().append('circle')
+          .attr('cx', d => x(d.Tháng))
+          .attr('cy', d => y(d['Xác suất mua hàng']))
+          .attr('r', 4)
+          .attr('fill', color(series.key))
+          .on("mouseover", function(event, d) {
+            tooltip.transition().duration(200).style("opacity", 0.9);
+            tooltip.html(`<strong>${d['Mã nhóm hàng']}</strong><br/>Tháng ${d.Tháng}<br/>Xác suất mua hàng: ${(d['Xác suất mua hàng']*100).toFixed(1)}%`)
+              .style("left", (event.pageX + 10) + "px")
+              .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mousemove", function(event, d) {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                   .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mouseout", function(event, d) {
+            tooltip.transition().duration(500).style("opacity", 0);
+          });
+      });
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', -20)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '20px')
+        .text('Xác suất bán hàng của từng nhóm theo Tháng');
+
+      svg.append('text')
+        .attr('class', 'axis-label')
+        .attr('x', -margin.left)
+        .attr('y', -20)
+        .attr('text-anchor', 'start');
+    });
+  </script>
+</body>
+</html>

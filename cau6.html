@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doanh số bán trung bình theo Khung giờ</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    svg {
+      font-family: sans-serif;
+    }
+    .bar:hover {
+      fill: orange;
+    }
+    .axis-label {
+      font-size: 12px;
+    }
+    .label {
+      font-size: 10px;
+      text-anchor: middle;
+      fill: black;
+    }
+    .tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 5px;
+      font-size: 12px;
+      font-family: sans-serif;
+      pointer-events: none;
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <svg></svg>
+  <div class="tooltip"></div>
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5YkI613Xtm0-uSA6NozEkDAWm17X7G-iCh_tVPrEv48RNmwgqkRpdwFcJntWRcTQOoMv1y2T1bBwC/pub?gid=1701574632&single=true&output=csv';
+    d3.csv(csvUrl).then(data => {
+      data.forEach(d => {
+        d['Thời gian tạo đơn'] = new Date(d['Thời gian tạo đơn']);
+        d.SL = +d.SL;
+        d['Đơn giá'] = +d['Đơn giá'];
+        d['Doanh thu'] = d.SL * d['Đơn giá'];
+        d['Khung giờ'] = d['Thời gian tạo đơn'].getHours();
+      });
+      
+      const salesStats = d3.rollups(
+        data,
+        v => ({
+          totalSales: d3.sum(v, d => d['Doanh thu']),
+          count: new Set(v.map(d => d['Thời gian tạo đơn'].toDateString())).size
+        }),
+        d => d['Khung giờ']
+      );
+      
+      const salesData = salesStats.map(([hour, { totalSales, count }]) => ({
+        hour: hour,
+        avgSales: totalSales / count
+      })).sort((a, b) => a.hour - b.hour);
+      
+      const hourLabels = salesData.map(d => `${String(d.hour).padStart(2, '0')}:00-${String(d.hour).padStart(2, '0')}:59`);
+      
+      const margin = { top: 50, right: 30, bottom: 80, left: 80 };
+      const width = 1200 - margin.left - margin.right;
+      const height = 600 - margin.top - margin.bottom;
+      
+      const svg = d3.select('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+      
+      const x = d3.scaleBand()
+        .domain(hourLabels)
+        .range([0, width])
+        .padding(0.3);
+      
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(salesData, d => d.avgSales)])
+        .nice()
+        .range([height, 0]);
+      
+      const colorScale = d3.scaleOrdinal(d3.schemeTableau10)
+        .domain(salesData.map(d => d.hour));
+      
+      const tooltip = d3.select('.tooltip');
+      
+      svg.selectAll('.bar')
+        .data(salesData)
+        .enter().append('rect')
+        .attr('class', 'bar')
+        .attr('x', d => x(`${String(d.hour).padStart(2, '0')}:00-${String(d.hour).padStart(2, '0')}:59`))
+        .attr('y', d => y(d.avgSales))
+        .attr('width', x.bandwidth())
+        .attr('height', d => height - y(d.avgSales))
+        .attr('fill', d => colorScale(d.hour))
+        .on('mouseover', function(event, d) {
+          tooltip.transition().duration(200).style('opacity', 0.9);
+          tooltip.html(`<strong>${String(d.hour).padStart(2, '0')}:00-${String(d.hour).padStart(2, '0')}:59</strong><br/>Doanh thu TB: ${d3.format(",.0f")(d.avgSales)} VNĐ`)
+            .style('left', (event.pageX + 10) + 'px')
+            .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mousemove', function(event) {
+          tooltip.style('left', (event.pageX + 10) + 'px')
+                 .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mouseout', function() {
+          tooltip.transition().duration(500).style('opacity', 0);
+        });
+      
+      svg.selectAll('.label')
+        .data(salesData)
+        .enter().append('text')
+        .attr('class', 'label')
+        .attr('x', d => x(`${String(d.hour).padStart(2, '0')}:00-${String(d.hour).padStart(2, '0')}:59`) + x.bandwidth() / 2)
+        .attr('y', d => y(d.avgSales) - 5)
+        .text(d => `${d3.format(",.0f")(d.avgSales)} VNĐ`);
+      
+      svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(
+          d3.axisBottom(x)
+        )
+        .selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-0.8em")
+        .attr("dy", "0.15em")
+        .attr("transform", "rotate(-45)");
+      
+      const maxSales = d3.max(salesData, d => d.avgSales);
+      const tickStep = 50000;
+      const yTicks = d3.range(0, maxSales + tickStep, tickStep);
+      
+      svg.append('g')
+        .call(
+          d3.axisLeft(y)
+            .tickValues(yTicks)
+            .tickFormat(d => `${(d / 1000).toFixed(0)}K`)
+        )
+        .selectAll("text")
+        .attr("class", "axis-label")
+        .style("font-size", "12px");
+      
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', -10)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '20px')
+        .text('Doanh số bán trung bình theo Khung giờ');
+    });
+  </script>
+</body>
+</html>

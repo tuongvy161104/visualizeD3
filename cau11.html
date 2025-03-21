@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Q11</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    svg {
+      font-family: sans-serif;
+    }
+    .bar {
+      fill: steelblue;
+    }
+    .bar:hover {
+      fill: orange;
+    }
+    .axis-label {
+      font-size: 12px;
+    }
+    .tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 5px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      font-family: sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <svg></svg>
+  <div class="tooltip"></div>
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5YkI613Xtm0-uSA6NozEkDAWm17X7G-iCh_tVPrEv48RNmwgqkRpdwFcJntWRcTQOoMv1y2T1bBwC/pub?gid=1701574632&single=true&output=csv';
+    d3.csv(csvUrl).then(data => {
+      const purchaseCount = d3.rollup(
+          data,
+          v => new Set(v.map(d => d['Mã đơn hàng'])).size,
+          d => d['Mã khách hàng']
+      );
+  
+      const purchaseData = Array.from(purchaseCount, ([customer, count]) => ({
+          customer: customer,
+          purchases: count
+      }));
+  
+      const purchaseGroups = d3.rollup(
+          purchaseData,
+          v => v.length,
+          d => d.purchases
+      );
+  
+      const bins = Array.from(purchaseGroups, ([purchases, customerCount]) => ({
+          "Số lần mua lặp lại": purchases,
+          "SL Khách Hàng": customerCount
+      }));
+  
+      bins.sort((a, b) => a["Số lần mua lặp lại"] - b["Số lần mua lặp lại"]);
+  
+      const margin = { top: 40, right: 20, bottom: 50, left: 70 };
+      const width = 1000 - margin.left - margin.right;
+      const height = 800 - margin.top - margin.bottom;
+  
+      const svg = d3.select('svg')
+          .attr('width', width + margin.left + margin.right)
+          .attr('height', height + margin.top + margin.bottom)
+          .append('g')
+          .attr('transform', `translate(${margin.left},${margin.top})`);
+
+      const x = d3.scaleBand()
+          .domain(bins.map(d => d["Số lần mua lặp lại"])) 
+          .range([0, width])
+          .padding(0.1);
+  
+      const y = d3.scaleLinear()
+          .domain([0, d3.max(bins, d => d["SL Khách Hàng"])])
+          .range([height, 0]);
+  
+      const color = d3.scaleOrdinal(d3.schemeTableau10);
+  
+      const tooltip = d3.select("body").append("div")
+          .attr("class", "tooltip")
+          .style("opacity", 0);
+  
+      svg.selectAll('.bar')
+          .data(bins)
+          .enter()
+          .append('rect')
+          .attr('class', 'bar')
+          .attr('x', d => x(d["Số lần mua lặp lại"]))
+          .attr('y', d => y(d["SL Khách Hàng"]))
+          .attr('width', x.bandwidth())
+          .attr('height', d => height - y(d["SL Khách Hàng"]))
+          .attr('fill', (d, i) => color(i))
+          .on("mouseover", function(event, d) {
+              tooltip.transition().duration(200).style("opacity", 0.9);
+              tooltip.html(`Số lượng KH: ${d["SL Khách Hàng"]}`)
+                  .style("left", (event.pageX + 10) + "px")
+                  .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mousemove", function(event) {
+              tooltip.style("left", (event.pageX + 10) + "px")
+                  .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mouseout", function() {
+              tooltip.transition().duration(500).style("opacity", 0);
+          });
+  
+      svg.append('g')
+          .attr('transform', `translate(0,${height})`)
+          .call(d3.axisBottom(x))
+          .attr('class', 'axis-label');
+  
+      svg.append('g')
+          .call(d3.axisLeft(y))
+          .attr('class', 'axis-label');
+  
+      svg.append('text')
+          .attr('x', width / 2)
+          .attr('y', -10)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '20px')
+          .text('Phân phối Lượt mua hàng');
+  
+      svg.append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('x', -height / 2)
+          .attr('y', -50)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '14px')
+          .text('Số khách hàng');
+  });  
+  </script>
+</body>
+</html>
